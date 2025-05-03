@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lung Cancer Detection</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#1e40af',
+                        'secondary': '#3b82f6',
+                        'accent': '#10b981',
+                        'error': '#ef4444',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body {
+            background: url('https://img.freepik.com/free-vector/medical-healthcare-blue-color_1017-26807.jpg') no-repeat center/cover;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        .scale-hover {
+            transition: transform 0.2s ease;
+        }
+        .scale-hover:hover {
+            transform: scale(1.05);
+        }
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translateY(10px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="text-gray-800 bg-gray-100 bg-opacity-80">
+    <div class="max-w-lg w-full mx-4 bg-white bg-opacity-95 backdrop-blur-md rounded-2xl shadow-2xl p-8">
+        <h1 class="text-3xl font-bold text-center text-gray-900 mb-4">Lung Cancer Detection</h1>
+        <p class="text-center text-gray-600 mb-8">Upload a lung scan to predict if it's benign, malignant, or normal.</p>
+
+        <!-- File Upload Form -->
+        <form id="uploadForm" class="space-y-6" aria-label="Image upload form">
+            <div class="flex items-center justify-center w-full">
+                <label for="fileInput" class="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-all">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg class="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V12m0 0V8m0 4h4m-4 0H3m18 0h-4m-4 4v4m0-4V8m0 4h4"></path>
+                        </svg>
+                        <p class="text-sm text-gray-600"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                        <p class="text-xs text-gray-500">PNG, JPG, or JPEG (Max 5MB)</p>
+                    </div>
+                    <input id="fileInput" type="file" accept="image/png,image/jpeg,image/jpg" class="hidden" aria-label="Upload lung scan image" />
+                </label>
+            </div>
+            <div id="imagePreview" class="hidden flex justify-center">
+                <img id="previewImage" class="max-w-full h-auto rounded-lg max-h-40" alt="Image preview" />
+            </div>
+            <button type="submit" class="w-full bg-secondary text-white font-semibold py-3 rounded-lg hover:bg-primary scale-hover transition-all disabled:bg-gray-400" disabled>Analyze Image</button>
+            <button type="button" id="metricsButton" class="w-full bg-gray-600 text-white font-semibold py-3 rounded-lg hover:bg-gray-700 scale-hover transition-all">View Model Metrics</button>
+        </form>
+
+        <!-- Error Alert -->
+        <div id="errorAlert" class="mt-6 hidden p-4 bg-error text-white rounded-lg" role="alert"></div>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="hidden flex justify-center mt-6">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-secondary"></div>
+        </div>
+
+        <!-- Result Modal -->
+        <div id="resultModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div class="bg-white bg-opacity-95 backdrop-blur-md rounded-2xl p-6 max-w-md w-full">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Prediction Result</h2>
+                <div class="flex flex-col items-center">
+                    <img id="uploadedImage" class="max-w-full h-auto rounded-lg mb-4 max-h-60 hidden" alt="Uploaded lung scan" />
+                    <p id="prediction" class="text-lg text-gray-700 font-medium mb-2"></p>
+                    <p id="confidence" class="text-lg text-gray-700"></p>
+                </div>
+                <button id="closeResultModal" class="mt-6 w-full bg-secondary text-white font-semibold py-3 rounded-lg hover:bg-primary scale-hover transition-all">Close</button>
+            </div>
+        </div>
+
+        <!-- Metrics Modal -->
+        <div id="metricsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div class="bg-white bg-opacity-95 backdrop-blur-md rounded-2xl p-6 max-w-xl w-full max-h-[90vh] overflow-y-auto">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Model Performance Metrics</h2>
+                <div id="metricsContent">
+                    <h3 class="text-xl font-semibold text-gray-900">Classification Metrics</h3>
+                    <ul class="text-lg text-gray-700 mb-6">
+                        <li id="precision" class="py-1"></li>
+                        <li id="recall" class="py-1"></li>
+                        <li id="f1Score" class="py-1"></li>
+                    </ul>
+                    <h3 class="text-xl font-semibold text-gray-900">Confusion Matrix</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-gray-700 mt-2 border border-gray-200">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="text-left p-2">Actual \ Predicted</th>
+                                    <th class="p-2 text-center">Benign</th>
+                                    <th class="p-2 text-center">Malignant</th>
+                                    <th class="p-2 text-center">Normal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="confusionMatrix"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <button id="closeModal" class="mt-6 w-full bg-secondary text-white font-semibold py-3 rounded-lg hover:bg-primary scale-hover transition-all">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('fileInput');
+        const previewImage = document.getElementById('previewImage');
+        const imagePreview = document.getElementById('imagePreview');
+        const analyzeButton = form.querySelector('button[type="submit"]');
+        const resultModal = document.getElementById('resultModal');
+        const uploadedImage = document.getElementById('uploadedImage');
+        const predictionText = document.getElementById('prediction');
+        const confidenceText = document.getElementById('confidence');
+        const closeResultModal = document.getElementById('closeResultModal');
+        const errorAlert = document.getElementById('errorAlert');
+        const loadingDiv = document.getElementById('loading');
+        const metricsButton = document.getElementById('metricsButton');
+        const metricsModal = document.getElementById('metricsModal');
+        const closeModal = document.getElementById('closeModal');
+        const precisionText = document.getElementById('precision');
+        const recallText = document.getElementById('recall');
+        const f1ScoreText = document.getElementById('f1Score');
+        const confusionMatrixTable = document.getElementById('confusionMatrix');
+
+        // Validate file
+        const validateFile = (file) => {
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+            if (!file) return 'No file selected.';
+            if (!allowedTypes.includes(file.type)) return 'Only PNG, JPG, or JPEG files are allowed.';
+            if (file.size > maxSize) return 'File size exceeds 5MB.';
+            return null;
+        };
+
+        // Show error alert
+        const showError = (message) => {
+            errorAlert.textContent = message;
+            errorAlert.classList.remove('hidden');
+            setTimeout(() => errorAlert.classList.add('hidden'), 5000);
+        };
+
+        // Handle file input change (preview image)
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            const error = validateFile(file);
+            if (error) {
+                showError(error);
+                imagePreview.classList.add('hidden');
+                analyzeButton.disabled = true;
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                imagePreview.classList.remove('hidden');
+                analyzeButton.disabled = false;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = fileInput.files[0];
+            const error = validateFile(file);
+            if (error) {
+                showError(error);
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Show loading and reset UI
+            loadingDiv.classList.remove('hidden');
+            errorAlert.classList.add('hidden');
+            resultModal.classList.add('hidden');
+            uploadedImage.classList.add('hidden');
+
+            // Set uploaded image
+            uploadedImage.src = previewImage.src;
+            uploadedImage.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await response.json();
+
+                if (data.error || !response.ok) {
+                    showError(data.error || 'An error occurred during prediction.');
+                    uploadedImage.classList.add('hidden');
+                    return;
+                }
+
+                // Display results in modal
+                predictionText.textContent = `Class: ${data.class}`;
+                confidenceText.textContent = `Confidence: ${(data.confidence * 100).toFixed(2)}%`;
+                resultModal.classList.remove('hidden');
+                resultModal.classList.add('fade-in');
+            } catch (error) {
+                showError('Could not connect to the server.');
+                uploadedImage.classList.add('hidden');
+                console.error('Prediction error:', error);
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        });
+
+        // Handle result modal close
+        closeResultModal.addEventListener('click', () => {
+            resultModal.classList.add('hidden');
+        });
+
+        // Close result modal on outside click
+        resultModal.addEventListener('click', (e) => {
+            if (e.target === resultModal) {
+                resultModal.classList.add('hidden');
+            }
+        });
+
+        // Close result modal with Escape key
+        resultModal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                resultModal.classList.add('hidden');
+            }
+        });
+
+        // Handle metrics button click
+        metricsButton.addEventListener('click', async () => {
+            loadingDiv.classList.remove('hidden');
+            errorAlert.classList.add('hidden');
+
+            try {
+                const response = await fetch('/metrics', {
+                    method: 'GET',
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showError(data.error || 'An error occurred while fetching metrics.');
+                    return;
+                }
+
+                // Display metrics
+                precisionText.textContent = `Precision: ${data.precision.toFixed(2)}`;
+                recallText.textContent = `Recall: ${data.recall.toFixed(2)}`;
+                f1ScoreText.textContent = `F1 Score: ${data.f1_score.toFixed(2)}`;
+
+                // Display confusion matrix
+                const labels = ['Benign', 'Malignant', 'Normal'];
+                confusionMatrixTable.innerHTML = '';
+                data.confusion_matrix.forEach((row, i) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="p-2 border-t">${labels[i]}</td>
+                        ${row.map(val => `<td class="p-2 border-t text-center">${val}</td>`).join('')}
+                    `;
+                    confusionMatrixTable.appendChild(tr);
+                });
+
+                metricsModal.classList.remove('hidden');
+            } catch (error) {
+                showError('Could not connect to the server.');
+                console.error('Metrics error:', error);
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        });
+
+        // Handle metrics modal close
+        closeModal.addEventListener('click', () => {
+            metricsModal.classList.add('hidden');
+        });
+
+        // Close metrics modal on outside click
+        metricsModal.addEventListener('click', (e) => {
+            if (e.target === metricsModal) {
+                metricsModal.classList.add('hidden');
+            }
+        });
+
+        // Close metrics modal with Escape key
+        metricsModal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                metricsModal.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
