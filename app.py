@@ -6,11 +6,11 @@ import os
 from PIL import Image
 
 app = Flask(__name__)
-model = load_model('lung_cancer_resnet50_model.keras')  # Load the trained model
+model = load_model('resnet50_model.keras')  # Load the trained model
 img_height, img_width = 224, 224  # Match training dimensions
 
-# Define class labels (adjust based on your training data)
-class_labels = ['Benign cases', 'Malignant cases', 'Normal cases']  # Update if 4 classes
+# Define class labels
+class_labels = ['Benign', 'Malignant', 'Normal']
 
 def preprocess_image(img):
     img = img.resize((img_width, img_height))
@@ -42,26 +42,19 @@ def predict():
         
         return jsonify({
             'class': predicted_class,
-            'confidence': f'{confidence:.2f}%'
+            'confidence': f'{confidence:.2f}'
         })
 
 @app.route('/metrics', methods=['GET'])
 def metrics():
-    # Placeholder metrics (replace with actual values from your model evaluation)
-    precision = 0.87  # Example macro precision
-    recall = 0.84     # Example macro recall
-    f1_score = 0.85   # Example macro F1 score
-    confusion_matrix = [
-        [50, 5, 2],  # Benign: [TP, FP, FP]
-        [3, 45, 4],  # Malignant: [FP, TP, FP]
-        [1, 2, 48]   # Normal: [FP, FP, TP]
-    ]
+    # Load metrics and confusion matrix
+    metrics_data = np.load('metrics.npy', allow_pickle=True).item()
     
     return jsonify({
-        'precision': precision,
-        'recall': recall,
-        'f1_score': f1_score,
-        'confusion_matrix': confusion_matrix
+        'precision': metrics_data['precision'],
+        'recall': metrics_data['recall'],
+        'f1_score': metrics_data['f1_score'],
+        'confusion_matrix': metrics_data['confusion_matrix'].tolist()
     })
 
 if __name__ == '__main__':

@@ -6,6 +6,9 @@ from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from tensorflow.keras.models import Model
 import tensorflow as tf
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # Define constants
 data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -68,7 +71,7 @@ train_dataset = tf.data.Dataset.from_tensor_slices((train_images, train_labels))
 valid_dataset = tf.data.Dataset.from_tensor_slices((valid_images, valid_labels)).batch(batch_size)
 test_dataset = tf.data.Dataset.from_tensor_slices((test_images, test_labels)).batch(batch_size)
 
-# Rest of your train.py (model definition, training loop, etc.) remains the same
+# Model definition
 base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(img_height, img_width, 3))
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
@@ -76,11 +79,12 @@ x = Dense(128, activation='relu')(x)
 predictions = Dense(3, activation='softmax')(x)  # 3 classes: Benign, Malignant, Normal
 model = Model(inputs=base_model.input, outputs=predictions)
 
+# Freeze base model layers initially
 for layer in base_model.layers:
     layer.trainable = False
 
+# Compile and train the model (initial training)
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
 history = model.fit(
     train_dataset,
     epochs=epochs,
@@ -88,10 +92,10 @@ history = model.fit(
     class_weight=class_weights
 )
 
+# Fine-tune the last 10 layers
 for layer in base_model.layers[-10:]:
     layer.trainable = True
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001), loss='categorical_crossentropy', metrics=['accuracy'])
-
 history_fine = model.fit(
     train_dataset,
     epochs=epochs,
@@ -99,11 +103,49 @@ history_fine = model.fit(
     class_weight=class_weights
 )
 
+# Evaluate on test dataset
 test_loss, test_accuracy = model.evaluate(test_dataset)
 print(f"Test accuracy: {test_accuracy:.4f}")
 
-model.save('lung_cancer_resnet50_model.keras')
-import matplotlib.pyplot as plt
+# Save the model
+model.save('resnet50_model.keras')
+
+# Compute confusion matrix and metrics
+y_true = np.argmax(test_labels, axis=1)  # True labels
+y_pred = np.argmax(model.predict(test_dataset), axis=1)  # Predicted labels
+conf_matrix = confusion_matrix(y_true, y_pred)
+
+# Compute precision, recall, and F1-score (macro-averaged)
+precision = precision_score(y_true, y_pred, average='macro')
+recall = recall_score(y_true, y_pred, average='macro')
+f1 = f1_score(y_true, y_pred, average='macro')
+
+# Print confusion matrix and metrics
+class_labels = ['Benign', 'Malignant', 'Normal']
+print("\nConfusion Matrix:")
+print(conf_matrix)
+print(f"\nPrecision (macro): {precision:.4f}")
+print(f"Recall (macro): {recall:.4f}")
+print(f"F1-Score (macro): {f1:.4f}")
+
+# Save metrics and confusion matrix for Flask app
+np.save('metrics.npy', {
+    'precision': precision,
+    'recall': recall,
+    'f1_score': f1,
+    'confusion_matrix': conf_matrix
+})
+
+# Visualize and save confusion matrix
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=class_labels, yticklabels=class_labels)
+plt.title('Confusion Matrix')
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.savefig('confusion_matrix.png')
+plt.close()
+
+# Plot and save training history
 plt.plot(history.history['accuracy'] + history_fine.history['accuracy'])
 plt.plot(history.history['val_accuracy'] + history_fine.history['val_accuracy'])
 plt.title('Model Accuracy')
